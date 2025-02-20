@@ -12,3 +12,4 @@ This system consists of multiple components working together to monitor and resp
 - **🧠 Main MCU:** Coordinates communication between components.
 
 ---
+Note: to use PLATFORMIO (as intended here), descend into your subsystem directory, it will not work at the top level!!
