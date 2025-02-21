@@ -5,59 +5,63 @@
 #include <stdio.h>
 
 volatile uint8_t doorState = 1; // door starts open
-volatile uint32_t system_time = 0; // global system time
+volatile uint32_t lastChangeTime = 0; // system time for debounce 
+extern volatile uint32_t system_time;
 
 
-
-void checkLSE() 
-{
-    if (RCC->BDCR & RCC_BDCR_LSERDY) 
-    {
-        printf("LSE 32.768 kHz Clock is running!\n");
-    } 
-    else 
-    {
-        printf("LSE Clock FAILED to start.\n");
-    }
-}
-
-void SysTick_Handler(void) 
-{
-    system_time++; // Increments every 1ms
-}
 
 int main(void) {
-    
-    // init system clock
-    //internal_clock(); 
-    //setup_lse_clock();
-    //checkLSE();
+    internal_clock(); // configure hsi in case this is probelm of gibberish 
+    init_systick(); // init systick timer
 
-    // init reedswitch
-    uart_init();
-    printf("Testing Reed Switch...\r\n");
-    
-    // initalize systick timer
-    SysTick_Config(SystemCoreClock / 1000);
+    uart_init(); // uart communication 
 
-    reedSwitch_init();
+    reedSwitch_init(); // initalize reed switch gpio
 
-    // init rf module
-    // init bat monitor
-    // enter sleep mode
-    
-    
+
+    // PC6 for LED output for gpio since i cant print :|
+    RCC->AHBENR |= RCC_AHBENR_GPIOCEN;
+    GPIOC->MODER |= (1 << 12); // Set PC6 as output
+    GPIOC->MODER &= ~(1 << 13); // Clear bit for output mode
+
     while (1) 
     {
-        // enter sleep mode wait for wakeup
-        //sleepModeEnter(); 
-        
+        uint32_t currentTime = system_time;
 
-        // if door state open send rf message
-        // if closed send rf message
+        // read the reed switch with 50 ms debounce 
+        if ((currentTime - lastChangeTime) >= 50) 
+        { 
+            uint8_t newState = getState(); 
+            if (newState != doorState) {
+                doorState = newState;
 
-        // read battery voltage
-        // if lower than 3.3 send message
+                // LED: ON if closed with magnet, OFF if open
+                if (doorState == 0) {
+                    GPIOC->ODR |= (1 << 6); //ON LED
+                } else {
+                    GPIOC->ODR &= ~(1 << 6); //OFF LED
+                }
+
+                lastChangeTime = currentTime; // debounce timer update 
+            }
+        }
+
+
+
+
+
+
+
+
+
+
+        uart_send_string("Loopback test: Sending data to RX...\r\n"); // not working 
+        // for UART testing gibberish 
+        if (USART2->ISR & USART_ISR_RXNE) // data recieved 
+        { 
+            char received = USART2->RDR;   // data was read 
+            uart_send_char(received);// echo back data 
+        }      
     
     }
 }

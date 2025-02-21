@@ -6,23 +6,11 @@
 #define REEDPIN 0 //pa0
 #define DEBOUNCE 50 // 50 ms debounce delay
 
-volatile uint32_t lastChangeTime = 0;
 extern volatile uint32_t system_time; // systick counter
-
-void reedSwitchEnableInt()
-{
-    RCC->APB2ENR |= RCC_APB2ENR_SYSCFGCOMPEN; // system config controller
-
-    SYSCFG->EXTICR[0] &= ~(0xF << (REEDPIN * 4)); // PA0 for the exti0
-    EXTI->IMR |= (1 << REEDPIN); // unmask interrupt
-    EXTI->RTSR |= (1 << REEDPIN); // rising edge trigger
-    EXTI->FTSR |= (1 << REEDPIN); // falling edge trigger
-    NVIC_EnableIRQ(EXTI0_1_IRQn); // enable int in NVIC
-}
 
 void reedSwitch_init()
 {
-    // clock
+    // clockfor GPIOA
     RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
 
     // set to input pa0
@@ -30,8 +18,6 @@ void reedSwitch_init()
 
     // internal pull up resistor so pin is high when open
     GPIOA->PUPDR |= (0x1 << (REEDPIN * 2));
-
-    reedSwitchEnableInt();
 }
 
 uint8_t getState()
@@ -41,7 +27,8 @@ uint8_t getState()
 }
 
 
-
+// interrupt logic to wake up the stm from deep sleep mode when a door state change happens
+/*
 void EXTI0_1_IRQHandler(void) 
 {
     if (EXTI->PR & (1 << REEDPIN)) // if interrupt from pa0
@@ -60,6 +47,18 @@ void EXTI0_1_IRQHandler(void)
         EXTI->PR |= (1 << REEDPIN); // clear int flag
     }
 }
+
+void reedSwitchEnableInt()
+{
+    RCC->APB2ENR |= RCC_APB2ENR_SYSCFGCOMPEN; // system config controller
+
+    SYSCFG->EXTICR[0] &= ~(0xF << (REEDPIN * 4)); // PA0 for the exti0
+    EXTI->IMR |= (1 << REEDPIN); // unmask interrupt
+    EXTI->RTSR |= (1 << REEDPIN); // rising edge trigger
+    EXTI->FTSR |= (1 << REEDPIN); // falling edge trigger
+    NVIC_EnableIRQ(EXTI0_1_IRQn); // enable int in NVIC
+}
+*/
 
 
 
