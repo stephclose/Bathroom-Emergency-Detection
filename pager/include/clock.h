@@ -4,6 +4,7 @@
 #include "system_stm32f0xx.h" 
 #include "core_cm0.h"        
 
+extern volatile uint32_t system_time;
 
 void internal_clock();
 void setup_lse_clock(); // config ext crystal for rtc

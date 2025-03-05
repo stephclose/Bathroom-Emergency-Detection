@@ -1,51 +1,57 @@
 #include "stm32f0xx.h"
 #include "rfm9x.h"
 #include "support.h"
+#include "uart.h"
+#include "debug.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define RFM9X_NSS_PIN      GPIO_ODR_4  // PA4 (CS)
-#define RFM9X_SCK_PIN      GPIO_ODR_5  // PA5 (Clock)
-#define RFM9X_MISO_PIN     GPIO_ODR_6  // PA6 (MISO)
-#define RFM9X_MOSI_PIN     GPIO_ODR_7  // PA7 (MOSI)
-#define RFM9X_G0_PIN       GPIO_ODR_8  // PA8 (Interrupt)
-#define RFM9X_RESET_PIN    GPIO_ODR_9  // PA0 (RESET)
+#define RFM9X_NSS_PIN      (1 << 4)  // PA4 (CS)
+#define RFM9X_SCK_PIN      (1 << 5)  // PA5 (Clock)
+#define RFM9X_MISO_PIN     (1 << 6)  // PA6 (MISO)
+#define RFM9X_MOSI_PIN     (1 << 7)  // PA7 (MOSI)
+#define RFM9X_G0_PIN       (1 << 8)  // PA8 (Interrupt)
+#define RFM9X_RESET_PIN    (1 << 0)  // PA0 (RESET)
 
 //===========================================================================
 // Configure GPIO and SPI1 for RFM9X LoRa
 //===========================================================================
 void init_spi1_lora(void) {
-    RCC->APB2ENR |= RCC_APB2ENR_SPI1EN; //enable SPI1 clock
-    RCC->AHBENR |= RCC_AHBENR_GPIOAEN; //enable GPIOA clock
+    RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;
+    RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
 
-    //PA4 (NSS), PA5 (SCK), PA6 (MISO), PA7 (MOSI) as alternate function
+    //PA4 (NSS), PA5 (SCK), PA6 (MISO), PA7 (MOSI) as alt
     GPIOA->MODER &= ~(GPIO_MODER_MODER4 | GPIO_MODER_MODER5 | GPIO_MODER_MODER6 | GPIO_MODER_MODER7);
-    GPIOA->MODER |= (GPIO_MODER_MODER4_1 | GPIO_MODER_MODER5_1 | GPIO_MODER_MODER6_1 | GPIO_MODER_MODER7_1); //AF mode
+    GPIOA->MODER |= (GPIO_MODER_MODER5_1 | GPIO_MODER_MODER6_1 | GPIO_MODER_MODER7_1);
+    GPIOA->MODER |= GPIO_MODER_MODER4_0;
 
     GPIOA->AFR[0] &= ~(0xF << (4 * 4) | 0xF << (5 * 4) | 0xF << (6 * 4) | 0xF << (7 * 4)); //AF0 for SPI1
+    GPIOA->AFR[0] |= (0 << (4 * 4)) | (0 << (5 * 4)) | (0 << (6 * 4)) | (0 << (7 * 4));
 
-    //PA0 (RESET) and PA8 (DIO0) as output/input
-    GPIOA->MODER &= ~(GPIO_MODER_MODER0 | GPIO_MODER_MODER8);
-    GPIOA->MODER |= GPIO_MODER_MODER0_0; //PA0 as output
-    GPIOA->PUPDR &= ~GPIO_PUPDR_PUPDR8;  //PA8 as input (LoRa interrupt)
+    GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR4 | GPIO_PUPDR_PUPDR5 | GPIO_PUPDR_PUPDR6 | GPIO_PUPDR_PUPDR7);
+    GPIOA->PUPDR |= (GPIO_PUPDR_PUPDR6_0);
 
-    //SPI1 in Master mode, software NSS
+    GPIOA->ODR |= GPIO_ODR_4;
+
     SPI1->CR1 &= ~SPI_CR1_SPE; //disable SPI before configuring
     SPI1->CR1 = SPI_CR1_MSTR | SPI_CR1_SSM | SPI_CR1_SSI; //master mode, software NSS
-    SPI1->CR1 |= SPI_CR1_BR; //set baud rate
+    SPI1->CR1 |= SPI_CR1_BR_2 | SPI_CR1_BR_1; //set baud rate
     SPI1->CR2 = SPI_CR2_DS_3 | SPI_CR2_DS_2 | SPI_CR2_DS_1 | SPI_CR2_DS_0; //8-bit data size
-    SPI1->CR1 |= SPI_CR1_SPE; //rnable SPI
+    SPI1->CR1 |= SPI_CR1_SPE;
+
 }
 
 //===========================================================================
 // Reset RFM9X Module
 //===========================================================================
 void rfm9x_reset(void) {
-    GPIOA->ODR &= ~RFM9X_RESET_PIN; //RESET low
-    nano_wait(100000);
-    GPIOA->ODR |= RFM9X_RESET_PIN; //RESET high
-    nano_wait(500000); 
+    RCC->AHBENR |= RCC_AHBENR_GPIOBEN;  
+    GPIOB->MODER |= GPIO_MODER_MODER0_0;  
+    GPIOB->ODR &= ~GPIO_ODR_0;  // RESET Low
+    nano_wait(50000000);        // 50ms delay
+    GPIOB->ODR |= GPIO_ODR_0;   // RESET High
+    nano_wait(50000000);        // 50ms delay
 }
 
 //===========================================================================
@@ -53,23 +59,27 @@ void rfm9x_reset(void) {
 //===========================================================================
 void rfm9x_nss_select(void) {
     GPIOA->ODR &= ~RFM9X_NSS_PIN; //NSS Low. select RFM9X
+    //uart_send_string("DEBUG: NSS LOW\r\n");
     nano_wait(100);
 }
 
 void rfm9x_nss_deselect(void) {
     nano_wait(100);
     GPIOA->ODR |= RFM9X_NSS_PIN;  //NSS High. deselect RFM9X
+    //uart_send_string("DEBUG: NSS HIGH\r\n");
 }
-
 
 //===========================================================================
 // Send and receive one byte over SPI
 //===========================================================================
 uint8_t spi1_lora_transfer(uint8_t data) {
-    while (!(SPI1->SR & SPI_SR_TXE)); //transmit buffer empty
-    SPI1->DR = data;  //send byte
-    while (!(SPI1->SR & SPI_SR_RXNE)); //received byte
-    return SPI1->DR; //read
+    while (!(SPI1->SR & SPI_SR_TXE));  
+    SPI1->DR = data;  
+
+    while (!(SPI1->SR & SPI_SR_RXNE));  
+    uint8_t received = SPI1->DR;
+
+    return received;
 }
 
 //===========================================================================
@@ -87,9 +97,16 @@ void rfm9x_write_register(uint8_t reg, uint8_t value) {
 //===========================================================================
 uint8_t rfm9x_read_register(uint8_t reg) {
     rfm9x_nss_select();
+    nano_wait(500);
     spi1_lora_transfer(reg & 0x7F); //clear MSB for read operation
     uint8_t value = spi1_lora_transfer(0x00); //dummy byte and receive data
+    nano_wait(500);
     rfm9x_nss_deselect();
+
+    char buf[50];
+    sprintf(buf, "Reg 0x%02X = 0x%02X\r\n", reg, value);
+    uart_send_string(buf);
+
     return value;
 }
 
@@ -160,11 +177,97 @@ uint8_t rfm9x_receive_packet(uint8_t *buffer, uint8_t max_length) {
 // Initialize RFM9X LoRa Module
 //===========================================================================
 void rfm9x_init(void) {
-    nano_wait(100000);  //allow time for module to start up
+    nano_wait(100000);
 
     //ex setup (for nown)
     rfm9x_write_register(0x01, 0x81); //set to LoRa mode
     rfm9x_write_register(0x06, 0x6C); //set freq
     rfm9x_write_register(0x09, 0xFF); //max power output
+}
+
+
+//===========================================================================
+// LOOPBACK TESTS
+//===========================================================================
+void test_rfm9x_registers() {
+    uart_send_string("Testing SPI Communication with RFM9X...\r\n");
+
+    for (uint8_t reg = 0x00; reg <= 0x7F; reg++) {  //read all 128 registers
+        uint8_t value = rfm9x_read_register(reg);
+        
+        char buf[50];
+        sprintf(buf, "Reg 0x%02X = 0x%02X\r\n", reg, value);
+        uart_send_string(buf);
+
+        nano_wait(100000);
+    }
+}
+
+void test_spi_loopback(void) {
+    uart_send_string("Testing SPI Loopback...\r\n");
+
+    uint8_t test_bytes[] = {0xAA, 0x55, 0xFF, 0x00, 0x42};  // Diverse test values
+    char buf[50];
+
+    for (int i = 0; i < sizeof(test_bytes); i++) {
+        uint8_t sent = test_bytes[i];
+        uint8_t received = spi1_lora_transfer(sent);  // SPI exchange
+
+        sprintf(buf, "SPI Sent: 0x%02X, Received: 0x%02X\r\n", sent, received);
+        uart_send_string(buf);
+    }
+
+    uart_send_string("SPI Loopback Test Complete!\r\n");
+}
+
+void test_spi_echo_loopback(void) {
+    uart_send_string("Starting Echo SPI Loopback...\r\n");
+
+    uint8_t test_values[] = {0xAA, 0x55, 0xFF, 0x00, 0x42};
+    for (int i = 0; i < sizeof(test_values); i++) {
+        uint8_t sent = test_values[i];
+        uint8_t received = spi1_lora_transfer(sent);
+
+        char buf[50];
+        sprintf(buf, "Sent: 0x%02X, Received: 0x%02X\r\n", sent, received);
+        uart_send_string(buf);
+
+        nano_wait(5000000);
+    }
+
+    uart_send_string("Basic SPI Loopback Test Complete!\r\n");
+}
+
+void test_miso_pin(void) {
+    uart_send_string("Forcing MISO (PA6) LOW...\r\n");
+
+    // Set PA6 (MISO) as Output (instead of SPI input)
+    GPIOA->MODER &= ~GPIO_MODER_MODER6;
+    GPIOA->MODER |= GPIO_MODER_MODER6_0; 
+
+    // Set PA6 LOW
+    GPIOA->ODR &= ~GPIO_ODR_6;
+
+    uart_send_string("MISO (PA6) Forced LOW! Now retest SPI...\r\n");
+
+    nano_wait(5000000);
+}
+
+void debug_spi_gpio(void) {
+    char buf[100];
+    
+    // Read GPIO modes
+    uint32_t moder = GPIOA->MODER;
+    uint32_t afr0 = GPIOA->AFR[0];
+    uint32_t pupdr = GPIOA->PUPDR;
+
+    sprintf(buf, "GPIOA MODER: 0x%08lX\r\n", moder);
+    uart_send_string(buf);
+
+    sprintf(buf, "GPIOA AFR[0]: 0x%08lX\r\n", afr0);
+    uart_send_string(buf);
+
+    sprintf(buf, "GPIOA PUPDR: 0x%08lX\r\n", pupdr);
+    uart_send_string(buf);
 }
 

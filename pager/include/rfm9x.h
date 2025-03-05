@@ -14,4 +14,10 @@ void rfm9x_set_tx_power(uint8_t power);
 void rfm9x_send_packet(uint8_t *data, uint8_t length);
 uint8_t rfm9x_receive_packet(uint8_t *buffer, uint8_t max_length);
 
+void test_rfm9x_registers(void);
+void test_spi_loopback(void);
+void test_spi_echo_loopback(void);
+void test_miso_pin(void);
+void debug_spi_gpio(void);
+
 #endif // RFM9X_H
