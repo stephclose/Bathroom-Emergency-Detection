@@ -12,35 +12,42 @@
 #define RFM9X_MISO_PIN     (1 << 6)  // PA6 (MISO)
 #define RFM9X_MOSI_PIN     (1 << 7)  // PA7 (MOSI)
 #define RFM9X_G0_PIN       (1 << 8)  // PA8 (Interrupt)
-#define RFM9X_RESET_PIN    (1 << 0)  // PA0 (RESET)
+#define RFM9X_RESET_PIN    (1 << 0)  // PB0 (RESET)
 
 //===========================================================================
 // Configure GPIO and SPI1 for RFM9X LoRa
 //===========================================================================
 void init_spi1_lora(void) {
-    RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;
-    RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
+    RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;  //Enable SPI1 clock
+    RCC->AHBENR |= RCC_AHBENR_GPIOAEN;   //Enable GPIOA clock
 
-    //PA4 (NSS), PA5 (SCK), PA6 (MISO), PA7 (MOSI) as alt
+    // Configure PA4 (NSS), PA5 (SCK), PA6 (MISO), PA7 (MOSI) for SPI1
     GPIOA->MODER &= ~(GPIO_MODER_MODER4 | GPIO_MODER_MODER5 | GPIO_MODER_MODER6 | GPIO_MODER_MODER7);
-    GPIOA->MODER |= (GPIO_MODER_MODER5_1 | GPIO_MODER_MODER6_1 | GPIO_MODER_MODER7_1);
-    GPIOA->MODER |= GPIO_MODER_MODER4_0;
+    GPIOA->MODER |= (GPIO_MODER_MODER5_1 | GPIO_MODER_MODER6_1 | GPIO_MODER_MODER7_1); //AF mode for SCK, MISO, MOSI
+    GPIOA->MODER |= GPIO_MODER_MODER4_0;  //NSS as output (manual control)
 
     GPIOA->AFR[0] &= ~(0xF << (4 * 4) | 0xF << (5 * 4) | 0xF << (6 * 4) | 0xF << (7 * 4)); //AF0 for SPI1
-    GPIOA->AFR[0] |= (0 << (4 * 4)) | (0 << (5 * 4)) | (0 << (6 * 4)) | (0 << (7 * 4));
 
     GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR4 | GPIO_PUPDR_PUPDR5 | GPIO_PUPDR_PUPDR6 | GPIO_PUPDR_PUPDR7);
-    GPIOA->PUPDR |= (GPIO_PUPDR_PUPDR6_0);
+    GPIOA->PUPDR |= GPIO_PUPDR_PUPDR6_0;  // Enable pull-up on MISO
 
-    GPIOA->ODR |= GPIO_ODR_4;
+    GPIOA->ODR |= GPIO_ODR_4;  //NSS HIGH (inactive)
 
-    SPI1->CR1 &= ~SPI_CR1_SPE; //disable SPI before configuring
-    SPI1->CR1 = SPI_CR1_MSTR | SPI_CR1_SSM | SPI_CR1_SSI; //master mode, software NSS
-    SPI1->CR1 |= SPI_CR1_BR_2 | SPI_CR1_BR_1; //set baud rate
-    SPI1->CR2 = SPI_CR2_DS_3 | SPI_CR2_DS_2 | SPI_CR2_DS_1 | SPI_CR2_DS_0; //8-bit data size
-    SPI1->CR1 |= SPI_CR1_SPE;
+    // Configure SPI1
+    SPI1->CR1 &= ~SPI_CR1_SPE;  // Disable SPI1 before configuring
+    SPI1->CR1 = SPI_CR1_MSTR | SPI_CR1_SSM | SPI_CR1_SSI; // Master mode, software NSS
 
+    SPI1->CR1 &= ~(SPI_CR1_CPOL | SPI_CR1_CPHA); // Ensure CPOL=0, CPHA=0 (SPI Mode 0)
+    
+    SPI1->CR1 |= SPI_CR1_BR_2 | SPI_CR1_BR_1; // Baud rate prescaler (adjust as needed)
+    
+    SPI1->CR2 = SPI_CR2_DS_3 | SPI_CR2_DS_2 | SPI_CR2_DS_1 | SPI_CR2_DS_0; // 8-bit data size
+    SPI1->CR1 |= SPI_CR1_SPE;  // Enable SPI1
+
+    uart_send_string("DEBUG: SPI1 Configured for Mode 0 (CPOL=0, CPHA=0)\r\n");
 }
+
+
 
 //===========================================================================
 // Reset RFM9X Module
@@ -48,39 +55,75 @@ void init_spi1_lora(void) {
 void rfm9x_reset(void) {
     RCC->AHBENR |= RCC_AHBENR_GPIOBEN;  
     GPIOB->MODER |= GPIO_MODER_MODER0_0;  
-    GPIOB->ODR &= ~GPIO_ODR_0;  // RESET Low
-    nano_wait(50000000);        // 50ms delay
-    GPIOB->ODR |= GPIO_ODR_0;   // RESET High
-    nano_wait(50000000);        // 50ms delay
+    GPIOB->ODR &= ~GPIO_ODR_0; //RESET Low
+    nano_wait(50000000); 
+    GPIOB->ODR |= GPIO_ODR_0; //RESET High
+    nano_wait(50000000); 
 }
 
 //===========================================================================
 // Set NSS (Chip Select) Low or High
 //===========================================================================
 void rfm9x_nss_select(void) {
-    GPIOA->ODR &= ~RFM9X_NSS_PIN; //NSS Low. select RFM9X
-    //uart_send_string("DEBUG: NSS LOW\r\n");
-    nano_wait(100);
+    uart_send_string("DEBUG: Forcing NSS LOW\r\n");
+    GPIOA->ODR &= ~RFM9X_NSS_PIN; // Set NSS Low (Select RFM9X)
+    
+    // Verify NSS actually changed
+    char buf[50];
+    sprintf(buf, "CHECK NSS AFTER LOW: %d\r\n", (GPIOA->ODR & RFM9X_NSS_PIN) ? 1 : 0);
+    uart_send_string(buf);
+
+    nano_wait(1000); // Small delay
 }
 
 void rfm9x_nss_deselect(void) {
-    nano_wait(100);
-    GPIOA->ODR |= RFM9X_NSS_PIN;  //NSS High. deselect RFM9X
-    //uart_send_string("DEBUG: NSS HIGH\r\n");
+    nano_wait(1000); // Small delay before NSS goes HIGH
+    GPIOA->ODR |= RFM9X_NSS_PIN;  // Set NSS High (Deselect RFM9X)
+    
+    // Verify NSS actually changed
+    char buf[50];
+    sprintf(buf, "CHECK NSS AFTER HIGH: %d\r\n", (GPIOA->ODR & RFM9X_NSS_PIN) ? 1 : 0);
+    uart_send_string(buf);
 }
+
 
 //===========================================================================
 // Send and receive one byte over SPI
 //===========================================================================
 uint8_t spi1_lora_transfer(uint8_t data) {
-    while (!(SPI1->SR & SPI_SR_TXE));  
-    SPI1->DR = data;  
+    char buf[50];
 
-    while (!(SPI1->SR & SPI_SR_RXNE));  
+    // Check NSS before SPI transfer
+    sprintf(buf, "Before SPI Transfer, NSS: %d\r\n", (GPIOA->ODR & RFM9X_NSS_PIN) ? 1 : 0);
+    uart_send_string(buf);
+
+    GPIOC->ODR |= GPIO_ODR_8;  //PC8 ON (Indicating SPI Start)
+
+    //wait until TX buffer is empty
+    while (!(SPI1->SR & SPI_SR_TXE));
+    SPI1->DR = data;
+    uart_send_string("TXE ready!\r\n");
+
+    // **DEBUG**: Toggle PC8 every time SCK toggles
+    for (int i = 0; i < 8; i++) { 
+        GPIOC->ODR ^= GPIO_ODR_8;  // Toggle PC8
+        nano_wait(5000);  // Small delay to make toggling visible
+    }
+
+    //wait until RX buffer has received data
+    while (!(SPI1->SR & SPI_SR_RXNE));
     uint8_t received = SPI1->DR;
+
+    GPIOC->ODR &= ~GPIO_ODR_8;  // PC8 OFF
+
+    // Check NSS after SPI transfer
+    sprintf(buf, "After SPI Transfer, NSS: %d\r\n", (GPIOA->ODR & RFM9X_NSS_PIN) ? 1 : 0);
+    uart_send_string(buf);
 
     return received;
 }
+
+
 
 //===========================================================================
 // Write to RFM9X Register
@@ -204,23 +247,6 @@ void test_rfm9x_registers() {
 }
 
 void test_spi_loopback(void) {
-    uart_send_string("Testing SPI Loopback...\r\n");
-
-    uint8_t test_bytes[] = {0xAA, 0x55, 0xFF, 0x00, 0x42};  // Diverse test values
-    char buf[50];
-
-    for (int i = 0; i < sizeof(test_bytes); i++) {
-        uint8_t sent = test_bytes[i];
-        uint8_t received = spi1_lora_transfer(sent);  // SPI exchange
-
-        sprintf(buf, "SPI Sent: 0x%02X, Received: 0x%02X\r\n", sent, received);
-        uart_send_string(buf);
-    }
-
-    uart_send_string("SPI Loopback Test Complete!\r\n");
-}
-
-void test_spi_echo_loopback(void) {
     uart_send_string("Starting Echo SPI Loopback...\r\n");
 
     uint8_t test_values[] = {0xAA, 0x55, 0xFF, 0x00, 0x42};
@@ -238,20 +264,12 @@ void test_spi_echo_loopback(void) {
     uart_send_string("Basic SPI Loopback Test Complete!\r\n");
 }
 
-void test_miso_pin(void) {
-    uart_send_string("Forcing MISO (PA6) LOW...\r\n");
-
-    // Set PA6 (MISO) as Output (instead of SPI input)
-    GPIOA->MODER &= ~GPIO_MODER_MODER6;
-    GPIOA->MODER |= GPIO_MODER_MODER6_0; 
-
-    // Set PA6 LOW
-    GPIOA->ODR &= ~GPIO_ODR_6;
-
-    uart_send_string("MISO (PA6) Forced LOW! Now retest SPI...\r\n");
-
-    nano_wait(5000000);
+void check_miso_status(void) {
+    char buf[50];
+    sprintf(buf, "MISO (PA6) Before Transfer: %d\r\n", (GPIOA->IDR & (1 << 6)) ? 1 : 0);
+    uart_send_string(buf);
 }
+
 
 void debug_spi_gpio(void) {
     char buf[100];
@@ -269,5 +287,38 @@ void debug_spi_gpio(void) {
 
     sprintf(buf, "GPIOA PUPDR: 0x%08lX\r\n", pupdr);
     uart_send_string(buf);
+}
+
+void test_sck_pin(void) {
+    GPIOA->MODER &= ~GPIO_MODER_MODER5;
+    GPIOA->MODER |= GPIO_MODER_MODER5_0;  
+
+    uart_send_string("Toggling SCK (PA5)...\r\n");
+
+    for (int i = 0; i < 10; i++) {
+        GPIOA->ODR ^= (1 << 5); 
+        nano_wait(500000);
+    }
+
+    uart_send_string("SCK (PA5) Toggle Test Done!\r\n");
+}
+
+void check_rfm9x_version() {
+    uart_send_string("Checking RFM9X Version...\r\n");
+    
+    rfm9x_nss_select();
+    uint8_t version = rfm9x_read_register(0x42);
+    rfm9x_nss_deselect();
+
+    char buf[50];
+    sprintf(buf, "RFM9X Version Read: 0x%02X\r\n", version);
+    uart_send_string(buf);
+
+    if (version == 0x12) {
+        uart_send_string("FM9X Detected Successfully!\r\n");
+    } else {
+        uart_send_string("ERROR: RFM9X Not Detected! Check SPI and Power.\r\n");
+        while (1); //Halt if no detection
+    }
 }
 

@@ -10,18 +10,15 @@ void uart_init(void) {
     //GPIOC Clock (For Debugging LED on PC6)
     RCC->AHBENR |= RCC_AHBENR_GPIOCEN;  
     GPIOC->MODER |= (1 << (6 * 2));  //PC6 as output
-    uart_send_string("USART2 Initialized!\r\n");
-
-    //USART2 Clock
     RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
     RCC->APB1ENR |= RCC_APB1ENR_USART2EN;
 
-    //toggle PC6 (Start of UART Init)
+    //toggle PC6 (start of UART Init)
     GPIOC->ODR ^= (1 << 6); 
     nano_wait(1000000000); 
     uart_send_string("DEBUG: GPIO Config Start\r\n");
 
-    //PA2 (TX), PA3 (RX) to Alternate Function (AF1)
+    //PA2 tx, PA3 rx to AF1
     GPIOA->MODER &= ~((3 << (2 * 2)) | (3 << (3 * 2))); 
     GPIOA->MODER |= (2 << (2 * 2)) | (2 << (3 * 2));    
     GPIOA->AFR[0] &= ~((0xF << (4 * 2)) | (0xF << (4 * 3))); 

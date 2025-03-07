@@ -4,6 +4,7 @@
 #include "button.h"
 #include "clock.h"
 #include "uart.h"
+#include "debug.h"
 #include <stdio.h>
 
 
@@ -16,43 +17,38 @@ void lcd_handler() {
 }
 
 void rfm9x_handler(){
-    
-    uart_send_string("Starting RFM9X Handler...\r\n");
-    
-    rfm9x_reset();
-    toggle_pc7_debug(1, 500);
+    check_rfm9x_version();
+    //test_sck_pin();
+    //check_miso_status();
+    //uart_send_string("Starting RFM9X Handler...\r\n");
+    //rfm9x_reset();
+    //toggle_pc7_debug(1, 500);
+    //uart_send_string("1. Reset!, ");
+    //init_spi1_lora();
+    //toggle_pc7_debug(1, 500);
+    //uart_send_string("2. SPI!, ");
+    //rfm9x_init();
+    //toggle_pc7_debug(1, 500);
+    //uart_send_string("3. Innit!, \r\n");
 
-    init_spi1_lora();
-    toggle_pc7_debug(1, 500);
-
-    rfm9x_init();
-    toggle_pc7_debug(1, 500);
-
-    debug_spi_gpio();
-    
-    test_spi_loopback();
-    test_spi_echo_loopback();
-    test_miso_pin();
-    test_spi_echo_loopback();
+    //debug_spi_gpio();
+    //test_spi_loopback();
+    //test_miso_pin();
+    //test_spi_loopback();
     //test_rfm9x_registers();
 
-    //check if RFM9x is responding
+
+    //uart_send_string("Forcing LoRa Transmission...\r\n");
+    //uint8_t msg[] = "Hello, LoRa!";
+    //rfm9x_send_packet(msg, sizeof(msg) - 1);
+
     //char debug_buf[50];
     //sprintf(debug_buf, "RFM9X Version: 0x%02X\r\n", version);
     //uart_send_string(debug_buf);
 
-    uart_send_string("Checking SPI Read...\r\n");
-    uint8_t version = rfm9x_read_register(0x42);
-    uart_send_string("SPI Read Done!\r\n");
-
-    if (version != 0x12) {
-        uart_send_string("ERROR: RFM9X Not Detected!\r\n");
-        toggle_pc7_debug(5, 200); //blink 5 times fast if error
-        while (1); // HALT
-    }
-
-    uart_send_string("RFM9X Detected! Version OK\r\n");
-    toggle_pc7_debug(1, 1000); //long blink for success
+    //uart_send_string("Checking SPI Read...\r\n");
+    //uint8_t version = rfm9x_read_register(0x42);
+    //uart_send_string("SPI Read Done!\r\n");
 
     /*
     //check RSSI
@@ -98,7 +94,6 @@ void rfm9x_handler(){
 }
 
 int main(void) {
-
     internal_clock();
     init_systick();
     uart_init();
@@ -106,10 +101,7 @@ int main(void) {
     pc7_led_init(); //debugging onboard leds
     pc8_led_init();
     lcd_handler();
-
-    toggle_pc8_debug(1, 500);
     rfm9x_handler();
-
 
     while (1){
         __WFI(); //wait for interrupt

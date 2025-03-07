@@ -16,8 +16,9 @@ uint8_t rfm9x_receive_packet(uint8_t *buffer, uint8_t max_length);
 
 void test_rfm9x_registers(void);
 void test_spi_loopback(void);
-void test_spi_echo_loopback(void);
-void test_miso_pin(void);
+void check_miso_status(void);
 void debug_spi_gpio(void);
+void test_sck_pin(void);
+void check_rfm9x_version(void);
 
 #endif // RFM9X_H
