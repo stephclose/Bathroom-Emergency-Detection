@@ -30,11 +30,10 @@ void button_init(void) {
 //===========================================================================
 void EXTI0_1_IRQHandler(void) {
     if (EXTI->PR & EXTI_PR_PR0) {  //check if PA0 triggered interrupt
-        if (!(GPIOA->IDR & GPIO_IDR_0)) { // Confirm button is pressed
+        if (!(GPIOA->IDR & GPIO_IDR_0)) { //confirm button is pressed
             uart_send_string("Button Pressed!\r\n");
         }
         lcd_clear();
-        toggle_pc8_debug(1, 100); //blink PC8 to show interrupt triggered
         lcd_set_cursor(0, 0); 
         lcd_send_string("Emergency");
         lcd_set_cursor(1, 0); 

@@ -50,8 +50,8 @@ void uart_init(void) {
 // Send a Single Character via USART2
 //===========================================================================
 void uart_send_char(char c) {
-    while (!(USART2->ISR & USART_ISR_TXE)); // Wait for TX buffer to be empty
-    USART2->TDR = c;  // Send char
+    while (!(USART2->ISR & USART_ISR_TXE)); //wait for TX buffer to be empty
+    USART2->TDR = c;  //send char
 }
 
 //===========================================================================
@@ -59,7 +59,7 @@ void uart_send_char(char c) {
 //===========================================================================
 void uart_send_string(const char *str) {
     while (*str) {
-        uart_send_char(*str++); // Send character-by-character
+        uart_send_char(*str++); //send character-by-character
         nano_wait(500000);
     }
 }

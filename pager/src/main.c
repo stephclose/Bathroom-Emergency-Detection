@@ -97,11 +97,12 @@ int main(void) {
     internal_clock();
     init_systick();
     uart_init();
-    //button_init(); //slow, fix 
+    button_init(); //slow, fix 
     pc7_led_init(); //debugging onboard leds
     pc8_led_init();
     lcd_handler();
-    rfm9x_handler();
+    //rfm9x_handler();
+    rfm9x_test_suite();
 
     while (1){
         __WFI(); //wait for interrupt

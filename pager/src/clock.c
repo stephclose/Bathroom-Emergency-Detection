@@ -2,7 +2,7 @@
 // sets up internal clock and external osc
 // manages timing functions
 
-volatile uint32_t system_time = 0;  // Global system timer in ms
+volatile uint32_t system_time = 0;  //global system timer in ms
 
 // config HSI for system clocking
 void internal_clock()
