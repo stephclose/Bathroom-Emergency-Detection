@@ -13,3 +13,7 @@ This system consists of multiple components working together to monitor and resp
 
 ---
 Note: to use PLATFORMIO (as intended here), descend into your subsystem directory, it will not work at the top level!!
+
+HAL – Provides high-level APIs that simplify peripheral control but remove low-level hardware access flexibility. (Switch to this method if RF modules aren't working before SB)
+
+Bare-Metal – Directly interacts with hardware registers, offering full control without abstraction layers. (please please work)
