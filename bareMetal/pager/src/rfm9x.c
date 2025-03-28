@@ -29,8 +29,8 @@ void init_spi1_lora(void) {
 
     //Configure SPI1 (Mode 0, 8-bit, Master)
     SPI1->CR1 &= ~SPI_CR1_SPE; //SPI disabled before configuring
+    
     SPI1->CR1 = SPI_CR1_MSTR | SPI_CR1_SSM | SPI_CR1_SSI;  //MM, software NSS
-    //SPI1->CR1 &= ~(SPI_CR1_CPOL | SPI_CR1_CPHA);  //mode 0 (CPOL=0, CPHA=0)
     SPI1->CR1 |= SPI_CR1_BR; //lowest baud rate 
 
     SPI1->CR2 |= SPI_CR2_DS_3 | SPI_CR2_DS_2 | SPI_CR2_DS_1 | SPI_CR2_DS_0;
@@ -59,10 +59,8 @@ void rfm9x_reset(void) {
 // NSS (Chip Select) Control Functions
 //===========================================================================
 void rfm9x_nss_select(void) {
-    // Ensure PA4 is an output
     GPIOA->MODER &= ~GPIO_MODER_MODER4;
     GPIOA->MODER |= GPIO_MODER_MODER4_0;
-
     GPIOA->ODR &= ~GPIO_ODR_4;  // NSS LOW
 }
 
@@ -74,21 +72,9 @@ void rfm9x_nss_deselect(void) {
 // Send and receive one byte over SPI
 //===========================================================================
 uint8_t spi1_lora_transfer(uint8_t data) {
-    // Wait until TX buffer is empty
-    uint32_t tx_timeout = 10000;
-    while (!(SPI1->SR & SPI_SR_TXE));
-
+    while (!(SPI1->SR & SPI_SR_TXE)); //wait until TX buffer is empty
     SPI1->DR = data;
-
-    // Wait until data is received
-    uint32_t rx_timeout = 10000;
-    while (!(SPI1->SR & SPI_SR_RXNE)) {
-        if (--rx_timeout == 0) {
-            uart_send_string("SPI RX Timeout\r\n");
-            return 0xFF;
-        }
-    }
-
+    while (!(SPI1->SR & SPI_SR_RXNE));
     return SPI1->DR;
 }
 
@@ -107,15 +93,11 @@ void rfm9x_write_register(uint8_t reg, uint8_t value) {
 //===========================================================================
 uint8_t rfm9x_read_register(uint8_t reg) {
     rfm9x_nss_select();
-    nano_wait(500);
-    spi1_lora_transfer(reg & 0x7F); //clear MSB for read operation
+    //spi1_lora_transfer(reg & 0x7F); //clear MSB for read operation
+    spi1_lora_transfer((reg - 1) & 0x7F); //TODO: NSS ISSUE CAUSING MISALIGHMENT
     uint8_t value = spi1_lora_transfer(0x00); //dummy byte and receive data
     nano_wait(500);
     rfm9x_nss_deselect();
-    //char buf[50];
-    //sprintf(buf, "Reg 0x%02X = 0x%02X\r\n", reg, value);
-    //uart_send_string(buf);
-
     return value;
 }
 
@@ -182,7 +164,6 @@ uint8_t rfm9x_receive_packet(uint8_t *buffer, uint8_t max_length) {
     return length;
 }
 
-
 //===========================================================================
 // TESTING FUNCTIONS
 //===========================================================================
@@ -197,21 +178,6 @@ void test_rfm9x_registers() {
         nano_wait(100000);
     }
 }
-
-void debug_spi_registers(void) {
-    char buf[200];
-
-    sprintf(buf, "SPI1->CR1: 0x%08lX\r\n", SPI1->CR1);
-    uart_send_string(buf);
-
-    sprintf(buf, "SPI1->CR2: 0x%08lX\r\n", SPI1->CR2);
-    uart_send_string(buf);
-
-    sprintf(buf, "SPI1->SR: 0x%08lX (BSY: %d, RXNE: %d, TXE: %d)\r\n", 
-        SPI1->SR, (SPI1->SR & SPI_SR_BSY) ? 1 : 0, (SPI1->SR & SPI_SR_RXNE) ? 1 : 0, (SPI1->SR & SPI_SR_TXE) ? 1 : 0);
-    uart_send_string(buf);
-}
-
 
 void test_spi_loopback(void) {
     uart_send_string("Starting Echo SPI Loopback...\r\n");
@@ -268,11 +234,9 @@ void test_spi_manual_transfer(void) {
 
     SPI1->DR = 0xAA;  //Send 0xAA
 
-    // Wait for TX complete
     while (!(SPI1->SR & SPI_SR_TXE));
     uart_send_string("TXE Set\r\n");
 
-    // Wait for RX data
     while (!(SPI1->SR & SPI_SR_RXNE));
     uint8_t received = SPI1->DR;
 
@@ -294,9 +258,36 @@ void test_rfm9x_basic_communication() {
 
     if (version == 0x12) {
         uart_send_string("RFM9X Initialized Successfully!\r\n");
-    } else {
-        uart_send_string("ERROR: RFM9X Communication Failed. Check SPI, NSS, RESET, Power.\r\n");
     }
+}
+
+void fake_rx_custom_message(const char* message) {
+    uint8_t len = strlen(message);
+    rfm9x_set_mode(0x01);
+    rfm9x_write_register(0x0D, 0x00);
+
+    for (uint8_t i = 0; i < len; i++) {
+        rfm9x_write_register(0x00, message[i]);
+    }
+
+    rfm9x_write_register(0x13, len);  //RegRxNbBytes
+    rfm9x_write_register(0x10, 0x00);  //RegFifoRxCurrentAddr
+
+    //manually simulate interrupt
+    rfm9x_write_register(0x12, 0x40);
+
+    uart_send_string("Reading back message from FIFO...\r\n");
+    rfm9x_set_mode(0x05);
+    uint8_t buf[64];
+    rfm9x_write_register(0x0D, 0x00);
+    for (uint8_t i = 0; i < len; i++) {
+        buf[i] = rfm9x_read_register(0x00);
+    }
+    buf[len] = '\0';
+
+    uart_send_string("What I get back: ");
+    uart_send_string((char*)buf);
+    uart_send_string("\r\n");
 }
 
 
