@@ -24,4 +24,5 @@ void check_rfm9x_version(void);
 void rfm9x_test_suite(void);
 void test_spi_manual_transfer(void);
 void debug_spi_registers(void);
+void test_rfm9x_basic_communication(void);
 #endif // RFM9X_H
