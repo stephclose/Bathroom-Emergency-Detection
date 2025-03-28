@@ -24,25 +24,31 @@ int main(void) {
 
     rfm9x_reset();
     init_spi1_lora();
-    while(1){
-        /*uart_send_string("Pulling NSS LOW\r\n");
-        rfm9x_nss_select();
-        while (!(SPI1->SR & SPI_SR_TXE));
-        SPI1->DR = 0xAA;
-        uart_send_string("TX 0xAA sent, waiting...\r\n");
+    test_rfm9x_registers();
+    nano_wait(1000000);
 
-        uart_send_string("Releasing NSS\r\n");
-        nano_wait(10000000);
-        rfm9x_nss_deselect();
-        nano_wait(10000000);*/
-        //test_spi_loopback();
-        test_rfm9x_registers();
-        nano_wait(1000000);
+    //send packet
+    uint8_t msg[] = "Hello from STM32!";
+    rfm9x_send_packet(msg, sizeof(msg) - 1);
 
+    uart_send_string("Packet sent!\r\n");
+    toggle_pc7_debug(2, 200);
+
+    uint8_t buffer[32];
+    uint8_t len = rfm9x_receive_packet(buffer, sizeof(buffer));
+
+    if (len > 0) {
+        buffer[len] = '\0';// null-terminate
+        uart_send_string("Received Packet: ");
+        uart_send_string((char*)buffer);
+        uart_send_string("\r\n");
+        toggle_pc7_debug(3, 100);
+    } else {
+        uart_send_string("No packet received\r\n");
     }
 
-    test_rfm9x_basic_communication();
-
+    //recieve packet
+    uart_send_string("Listening...\r\n");
 
     while (1) {
         __WFI(); // Sleep forever

@@ -231,7 +231,6 @@ void test_spi_loopback(void) {
     uart_send_string("Basic SPI Loopback Test Complete!\r\n");
 }
 
-
 void check_miso_status(void) {
     char buf[50];
     sprintf(buf, "MISO (PA6) Before Transfer: %d\r\n", (GPIOA->IDR & (1 << 6)) ? 1 : 0);
@@ -299,6 +298,7 @@ void test_rfm9x_basic_communication() {
         uart_send_string("ERROR: RFM9X Communication Failed. Check SPI, NSS, RESET, Power.\r\n");
     }
 }
+
 
 void rfm9x_test_suite() {
     uart_send_string("\nRunning RFM9X Test Suite...\r\n");
