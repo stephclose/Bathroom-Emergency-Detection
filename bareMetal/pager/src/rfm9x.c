@@ -93,9 +93,8 @@ void rfm9x_write_register(uint8_t reg, uint8_t value) {
 //===========================================================================
 uint8_t rfm9x_read_register(uint8_t reg) {
     rfm9x_nss_select();
-    //spi1_lora_transfer(reg & 0x7F); //clear MSB for read operation
-    spi1_lora_transfer((reg - 1) & 0x7F); //TODO: NSS ISSUE CAUSING MISALIGHMENT
-    uint8_t value = spi1_lora_transfer(0x00); //dummy byte and receive data
+    spi1_lora_transfer((reg) & 0x7F);
+    uint8_t value = spi1_lora_transfer(0xff); //dummy byte and receive data
     nano_wait(500);
     rfm9x_nss_deselect();
     return value;

@@ -29,35 +29,9 @@ int main(void) {
     test_rfm9x_basic_communication();
     nano_wait(1000000);
     
-    rfm9x_set_frequency(915);
-    rfm9x_set_tx_power(2);
-    fake_rx_custom_message("Hello world");
+    fake_rx_custom_message("blahblahblbh!");
 
-    //send packet
-    /*
-    uint8_t msg[] = "Hello from STM32!";
-    rfm9x_send_packet(msg, sizeof(msg) - 1);
-
-    uart_send_string("Packet sent!\r\n");
-    toggle_pc7_debug(2, 200);
-
-    //recieve packet
-    uart_send_string("Listening...\r\n");
-
-    uint8_t buffer[32];
-    uint8_t len = rfm9x_receive_packet(buffer, sizeof(buffer));
-
-    if (len > 0) {
-        buffer[len] = '\0';// null-terminate
-        uart_send_string("Received Packet: ");
-        uart_send_string((char*)buffer);
-        uart_send_string("\r\n");
-        toggle_pc7_debug(3, 100);
-    } else {
-        uart_send_string("No packet received\r\n");
-    }
-    */
     while (1) {
-        __WFI(); // Sleep forever
+        __WFI(); //sleep forever
     }
 }
