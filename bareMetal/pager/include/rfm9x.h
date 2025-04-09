@@ -18,10 +18,12 @@ void rfm9x_nss_deselect(void);
 void test_rfm9x_registers(void);
 void test_spi_loopback(void);
 void check_miso_status(void);
+void fake_rx_custom_message(const char* message);
 void debug_spi_gpio(void);
 void test_sck_pin(void);
 void check_rfm9x_version(void);
 void rfm9x_test_suite(void);
 void test_spi_manual_transfer(void);
 void debug_spi_registers(void);
+void test_rfm9x_basic_communication(void);
 #endif // RFM9X_H
