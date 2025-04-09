@@ -39,3 +39,16 @@ void print_usart_status(void)
     //sprintf(buffer, "USART ISR Status: 0x%08lX\r\n", USART2->ISR);
     uart_send_string(buffer);
 }
+
+#ifdef __GNUC__
+/* With GCC, small printf calls _write() */
+int _write(int file, char *ptr, int len)
+{
+    int i;
+    for(i = 0; i < len; i++)
+    {
+        uart_send_char(ptr[i]);
+    }
+    return len;
+}
+#endif

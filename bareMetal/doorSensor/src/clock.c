@@ -5,7 +5,7 @@
 volatile uint32_t system_time = 0;  // Global system timer in ms
 
 // config HSI for system clocking
-void internal_clock()
+void internal_clock(void)
 {
     // enable HSI
     RCC->CR |= RCC_CR_HSION; // enable hsi osc
@@ -28,10 +28,8 @@ void internal_clock()
     while ((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_PLL);  // until pll used
 
     // prescalers for AHB APB
-    RCC->CFGR |= RCC_CFGR_HPRE_DIV1;  
-    RCC->CFGR |= RCC_CFGR_PPRE_DIV1; 
-
-    SystemCoreClockUpdate(); // update global var 
+    RCC->CFGR |= RCC_CFGR_HPRE_DIV1 | RCC_CFGR_PPRE_DIV1;  
+    //SystemCoreClockUpdate(); // update global var 
 }
 
 // config lse osc 
@@ -57,7 +55,11 @@ void SysTick_Handler(void)
 
 void init_systick(void) 
 {
-    SysTick_Config(SystemCoreClock / 1000); // 1ms systick interrupt
+    //SysTick_Config(SystemCoreClock / 1000); // 1ms systick interrupt
+    /* SYSTICK = CPU freq / 1000 => 1ms tick */
+    SysTick->LOAD = (48000000UL / 1000UL) - 1UL;  // 48k - 1
+    SysTick->VAL = 0;
+    SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk | SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk;   // enable, interrupt
 }
 
 void delay_ms(int ms) // delay for blinking light test 
