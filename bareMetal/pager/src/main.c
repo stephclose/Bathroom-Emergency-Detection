@@ -16,92 +16,62 @@ void lcd_handler() {
     lcd_send_string(" & PCF8574");
 }
 
+void rfm9x_init(void) {
+    rfm9x_reset();
+    nano_wait(100000);
+    init_spi1_lora();
+    nano_wait(100000);
+    
+    test_rfm9x_registers();
+
+    rfm9x_enter_lora_mode();
+    nano_wait(10000);
+    rfm9x_set_mode(0x81); // standby
+    nano_wait(10000);
+}
+
 int main(void) {
     internal_clock();
     init_systick();
     uart_init();
-    pc7_led_init();
+    //pc7_led_init();
+    
 
-    //TESTING TRANSMITTING CODE
-    rfm9x_reset();
-    init_spi1_lora();
-    rfm9x_set_frequency(915);
+    rfm9x_init();
+
+    rfm9x_write_register(0x06, 0xE4);
+    nano_wait(1000);
+    rfm9x_write_register(0x07, 0x00);
+    nano_wait(1000);
+    rfm9x_write_register(0x08, 0xC0);
+    nano_wait(1000);
+
+    //set frequency and power
+    //rfm9x_set_frequency(915);
     rfm9x_set_tx_power(14);
-    rfm9x_set_mode(0x01); 
-    
-    uart_send_string("Transmitter ready!\r\n");
-    const char *msg = "Hello from STM32 TX!";
-    uint8_t buffer[64];
-    strcpy((char*)buffer, msg);
 
+    uart_send_string("LoRa TX/RX Ready\r\n");
+    const char* message = "Hello!";
     while (1) {
-        uart_send_string("Sending packet...\r\n");
-        rfm9x_send_packet(buffer, strlen((char*)buffer));
-        uart_send_string("Sent!\r\n");
+        //TX
+        test_rfm9x_write_read_frf_registers();
+        rfm9x_transmit_message(message);
+        rfm9x_print_tx_config(strlen(message));
         nano_wait(1000000000);
-    }
 
-    //RECIEVING CODE
-    rfm9x_reset();
-    init_spi1_lora();
-    rfm9x_set_frequency(915);
-    rfm9x_set_mode(0x05);
+        //RX
+        rfm9x_write_register(0x12, 0xFF);
+        rfm9x_set_mode(0x05);
 
-    uart_send_string("Receiver listening...\r\n");
-
-    while (1) {
-        uint8_t irq_flags = rfm9x_read_register(0x12);
-        if (irq_flags & 0x40) {
-            rfm9x_write_register(0x12, 0xFF);
-
-            uint8_t buffer[64];
-            uint8_t len = rfm9x_receive_packet(buffer, sizeof(buffer));
-            buffer[len] = '\0';
-
+        char rx_buf[64];
+        uint8_t len = rfm9x_try_receive_message(rx_buf, sizeof(rx_buf));
+        if (len > 0) {
             uart_send_string("Got message: ");
-            uart_send_string((char*)buffer);
+            uart_send_string(rx_buf);
             uart_send_string("\r\n");
-
-            rfm9x_set_mode(0x05);
+        } else {
+            uart_send_string("No message received...\r\n");
         }
-
-        __WFI();
+        __WFI(); //sleep until interrupt (saves power)
     }
-}
-
-    //rfm9x_reset();
-    //init_spi1_lora();
-    //test_rfm9x_registers();
-    //nano_wait(1000000);
-    //test_rfm9x_basic_communication();
-    //nano_wait(1000000);
-    
-    //fake_rx_custom_message("blahblahblbh!");
-
-    //uint8_t buffer[64];
-    //uint8_t len = rfm9x_receive_packet(buffer, sizeof(buffer));
-    //if (len > 0) {
-    //    buffer[len] = '\0';
-    //    uart_send_string("Received: ");
-    //    uart_send_string((char*)buffer);
-    //    uart_send_string("\r\n");
-    //}
-
-
-    /*while (1) {
-        uint8_t irq_flags = rfm9x_read_register(0x12); //IRQ Flags
-        if (irq_flags & 0x40) { // RX Done
-            rfm9x_write_register(0x12, 0xFF); //clear all IRQ flags
-            uint8_t buffer[64];
-            uint8_t len = rfm9x_receive_packet(buffer, sizeof(buffer));
-            buffer[len] = '\0';
-            uart_send_string("Got message: ");
-            uart_send_string((char*)buffer);
-            uart_send_string("\r\n");
-            rfm9x_set_mode(0x05);
-        }
-    __WFI();
-    }*
-
-
 }
