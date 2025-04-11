@@ -21,7 +21,7 @@ void rfm9x_init(void) {
     nano_wait(100000);
     init_spi1_lora();
     nano_wait(100000);
-    
+
     test_rfm9x_registers();
 
     rfm9x_enter_lora_mode();
@@ -35,26 +35,25 @@ int main(void) {
     init_systick();
     uart_init();
     //pc7_led_init();
-    
 
     rfm9x_init();
 
-    rfm9x_write_register(0x06, 0xE4);
-    nano_wait(1000);
-    rfm9x_write_register(0x07, 0x00);
-    nano_wait(1000);
-    rfm9x_write_register(0x08, 0xC0);
-    nano_wait(1000);
+    //rfm9x_write_register(0x05, 0xE4);
+    //nano_wait(1000);
+    //rfm9x_write_register(0x06, 0x00);
+    //nano_wait(1000);
+    //rfm9x_write_register(0x07, 0xC0);
+    //nano_wait(1000);
 
     //set frequency and power
     //rfm9x_set_frequency(915);
-    rfm9x_set_tx_power(14);
+    //rfm9x_set_tx_power(14);
 
     uart_send_string("LoRa TX/RX Ready\r\n");
     const char* message = "Hello!";
     while (1) {
         //TX
-        test_rfm9x_write_read_frf_registers();
+        //test_rfm9x_write_read_frf_registers();
         rfm9x_transmit_message(message);
         rfm9x_print_tx_config(strlen(message));
         nano_wait(1000000000);

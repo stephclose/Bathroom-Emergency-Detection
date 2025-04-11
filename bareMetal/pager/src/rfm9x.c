@@ -169,7 +169,6 @@ void rfm9x_set_frequency(uint32_t freq_mhz) {
     uint8_t mid = (frf >> 8) & 0xFF;
     uint8_t lsb = frf & 0xFF;
 
-    // Write each register with delay
     rfm9x_write_register(0x06, msb);
     nano_wait(1000);
 
@@ -183,7 +182,6 @@ void rfm9x_set_frequency(uint32_t freq_mhz) {
     rfm9x_write_register(0x08, lsb);
     nano_wait(1000);
 
-    // Confirm write
     char buf[64];
     sprintf(buf, "FRF Written: %02X %02X %02X\r\n", msb, mid, lsb);
     uart_send_string(buf);
@@ -343,9 +341,9 @@ void rfm9x_print_tx_config(uint8_t expected_payload_len) {
 
 void test_rfm9x_registers() {
     uart_send_string("Testing SPI Communication with RFM9X...\r\n");
-
+    
     for (uint8_t reg = 0x00; reg <= 0x7F; reg++) {  //read all 128 registers
-        uint8_t value = rfm9x_read_register(reg);
+        uint8_t value = rfm9x_read_register(reg - (reg != 0));
         char buf[50];
         sprintf(buf, "Reg 0x%02X = 0x%02X\r\n", reg, value);
         uart_send_string(buf);
