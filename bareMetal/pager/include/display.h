@@ -20,5 +20,7 @@ void lcd_send_data(uint8_t data);
 void lcd_send_string(char *str);
 void lcd_clear(void);
 void lcd_set_cursor(uint8_t row, uint8_t col);
+int alert_triggered(void);
+int emergency_cleared(void);
 
 #endif // LCD_H

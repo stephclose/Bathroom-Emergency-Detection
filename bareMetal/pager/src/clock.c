@@ -66,3 +66,7 @@ void delay_ms(int ms) // delay for blinking light test
         __NOP();
     }
 }
+
+uint32_t get_system_time_ms(void) {
+    return system_time;
+}

@@ -11,5 +11,6 @@ void setup_lse_clock(); // config ext crystal for rtc
 void init_systick(void); // up 1 ms
 void SysTick_Handler(void);
 void delay_ms(int ms); // delay light blinking or whatevr
+uint32_t get_system_time_ms(void);
 
 #endif

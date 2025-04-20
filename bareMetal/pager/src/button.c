@@ -4,6 +4,10 @@
 #include "uart.h"
 #include "button.h"
 #include "clock.h"
+#include "state.h"
+
+//PB2 (EXTI2): Triggers the emergency alert
+//PA0 (EXTI0): Acknowledges the emergency
 
 //===========================================================================
 // Configure Button on PA0 as External Interrupt (EXTI)
@@ -29,15 +33,49 @@ void button_init(void) {
 // EXTI Interrupt Handler for PA0 Button Press
 //===========================================================================
 void EXTI0_1_IRQHandler(void) {
-    if (EXTI->PR & EXTI_PR_PR0) {  //check if PA0 triggered interrupt
+    if (EXTI->PR & EXTI_PR_PR0) {
         if (!(GPIOA->IDR & GPIO_IDR_0)) { //confirm button is pressed
-            uart_send_string("Button Pressed!\r\n");
+            uart_send_string("PA0 Button: Acknowledge\r\n");
+
+            // Only acknowledge if in emergency mode
+            if (lcd_state == LCD_STATE_EMERGENCY) {
+                lcd_state = LCD_STATE_ACKNOWLEDGED;
+            }
         }
-        lcd_clear();
-        lcd_set_cursor(0, 0); 
-        lcd_send_string("Emergency");
-        lcd_set_cursor(1, 0); 
-        lcd_send_string("Acknowledged");
-        EXTI->PR |= EXTI_PR_PR0; //clear interrupt flag
+        EXTI->PR |= EXTI_PR_PR0; // Clear pending flag
+    }
+}
+
+//===========================================================================
+// FAKE RF ACKNOWLEDGED, JUST SIMULATED THAT AN RF WAS RECIEVED OR SMT
+//===========================================================================
+
+void configure_pb2_exti(void) {
+    RCC->AHBENR |= RCC_AHBENR_GPIOBEN; // Enable GPIOB clock
+    RCC->APB2ENR |= RCC_APB2ENR_SYSCFGCOMPEN; // Enable SYSCFG
+
+    GPIOB->MODER &= ~GPIO_MODER_MODER2; // PB2 as input
+    GPIOB->PUPDR &= ~GPIO_PUPDR_PUPDR2;
+    GPIOB->PUPDR |= GPIO_PUPDR_PUPDR2_1; // Pull-down
+
+    SYSCFG->EXTICR[0] &= ~SYSCFG_EXTICR1_EXTI2;
+    SYSCFG->EXTICR[0] |= SYSCFG_EXTICR1_EXTI2_PB; // Map EXTI2 to PB2
+
+    EXTI->IMR |= EXTI_IMR_IM2; // Unmask EXTI2
+    EXTI->FTSR |= EXTI_FTSR_TR2; // Trigger on falling edge
+
+    NVIC_EnableIRQ(EXTI2_3_IRQn);
+    NVIC_SetPriority(EXTI2_3_IRQn, 1);
+}
+
+void EXTI2_3_IRQHandler(void) {
+    if (EXTI->PR & EXTI_PR_PR2) {
+        if (lcd_state == LCD_STATE_STANDBY) {
+            lcd_state = LCD_STATE_EMERGENCY;
+        } else if (lcd_state == LCD_STATE_EMERGENCY) {
+            lcd_state = LCD_STATE_ACKNOWLEDGED;
+        }
+        uart_send_string("PB2 Button Toggled\r\n");
+        EXTI->PR |= EXTI_PR_PR2; // Clear pending flag
     }
 }

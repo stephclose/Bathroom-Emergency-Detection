@@ -1,6 +1,7 @@
 #include "stm32f0xx.h"
 #include "rfm9x.h"
 #include "support.h"
+#include "clock.h"
 #include "uart.h"
 #include "debug.h"
 #include <stdio.h>
@@ -14,39 +15,60 @@
 #define RFM9X_G0_PIN       (1 << 8)  // PA8 (Interrupt)
 #define RFM9X_RESET_PIN    (1 << 0)  // PB0 (RESET)
 
+#define ENABLE_SPI1_CLOCK()     RCC->APB2ENR |= RCC_APB2ENR_SPI1EN
+#define ENABLE_GPIOA_CLOCK()    RCC->AHBENR |= RCC_AHBENR_GPIOAEN
+#define ENABLE_GPIOB_CLOCK()    RCC->AHBENR |= RCC_AHBENR_GPIOBEN
+
 //===========================================================================
 // Initialize SPI and GPIOS
 //===========================================================================
 void init_spi1_lora(void) {
-    RCC->APB2ENR |= RCC_APB2ENR_SPI1EN; //enable SPI1 clock
-    RCC->AHBENR |= RCC_AHBENR_GPIOAEN; //enable GPIOA clock
+    ENABLE_SPI1_CLOCK();
+    ENABLE_GPIOA_CLOCK();
 
-    // -- PA4: GPIO output mode for NSS
+    //PA4: NSS
     GPIOA->MODER &= ~GPIO_MODER_MODER4;
     GPIOA->MODER |= GPIO_MODER_MODER4_0;
+    GPIOA->ODR |= RFM9X_NSS_PIN;
 
-    GPIOA->ODR |= (1 << 4);
-
-    // -- PA5–PA7: AF mode for SPI1
+    //PA5–PA7: AF SPI1
     GPIOA->MODER &= ~(GPIO_MODER_MODER5 | GPIO_MODER_MODER6 | GPIO_MODER_MODER7);
     GPIOA->MODER |=  (GPIO_MODER_MODER5_1 | GPIO_MODER_MODER6_1 | GPIO_MODER_MODER7_1); // AF
-
-    // -- Set AF0 for SPI1 on PA5–PA7 (AFR[0])
     GPIOA->AFR[0] &= ~((0xF << (5 * 4)) | (0xF << (6 * 4)) | (0xF << (7 * 4)));
 
-    //Configure SPI1 (Mode 0, 8-bit, Master)
     SPI1->CR1 &= ~SPI_CR1_SPE;
-    
-    SPI1->CR1 = SPI_CR1_MSTR | SPI_CR1_SSM | SPI_CR1_SSI;  //MM, software NSS
+
     SPI1->CR1 &= ~(SPI_CR1_CPOL | SPI_CR1_CPHA);
-    SPI1->CR1 |= SPI_CR1_BR; //lowest baud rate 
+    SPI1->CR1 |= SPI_CR1_MSTR | SPI_CR1_SSM | SPI_CR1_SSI;  //MM, software NSS
+    SPI1->CR1 |= SPI_CR1_BR; //lowest br
 
     SPI1->CR2 |= SPI_CR2_DS_3 | SPI_CR2_DS_2 | SPI_CR2_DS_1 | SPI_CR2_DS_0;
     SPI1->CR2 &= ~SPI_CR2_DS_3; //8-bit transmission
+    
     SPI1->CR1 |= SPI_CR1_SPE;  
 
-    uart_send_string("SPI1 Enabled and Configured in Mode 0\r\n");
 }
+
+//===========================================================================
+// Reset RFM9X Module
+//===========================================================================
+void rfm9x_reset(void) {
+    ENABLE_GPIOB_CLOCK();
+    GPIOB->MODER &= ~GPIO_MODER_MODER0;
+    GPIOB->MODER |= GPIO_MODER_MODER0_0;
+
+    GPIOB->ODR &= ~GPIO_ODR_0; //RESET Low
+    nano_wait(50000000); 
+    GPIOB->ODR |= GPIO_ODR_0; //RESET High
+    nano_wait(50000000); 
+}
+
+//===========================================================================
+// NSS (Chip Select) Control Functions
+//===========================================================================
+
+void rfm9x_nss_select(void)   { GPIOA->ODR &= ~RFM9X_NSS_PIN; }
+void rfm9x_nss_deselect(void) { GPIOA->ODR |=  RFM9X_NSS_PIN; }
 
 void test_rfm9x_write_read_frf_registers() {
     uart_send_string("Testing manual FRF write...\r\n");
@@ -76,34 +98,9 @@ void test_rfm9x_write_read_frf_registers() {
 void rfm9x_enter_lora_mode(void) {
     uint8_t opmode = rfm9x_read_register(0x01);
     if (!(opmode & 0x80)) {
-        rfm9x_write_register(0x01, opmode | 0x80); //set LoRa mode bit
+        rfm9x_write_register(0x01, opmode | 0x80);
         nano_wait(10000);
     }
-}
-
-//===========================================================================
-// Reset RFM9X Module
-//===========================================================================
-void rfm9x_reset(void) {
-    RCC->AHBENR |= RCC_AHBENR_GPIOBEN;  
-    GPIOB->MODER &= ~GPIO_MODER_MODER0;  //clear mode
-    GPIOB->MODER |= GPIO_MODER_MODER0_0; //set PB0 as output
-
-    GPIOB->ODR &= ~GPIO_ODR_0; //RESET Low
-    nano_wait(50000000); 
-    GPIOB->ODR |= GPIO_ODR_0; //RESET High
-    nano_wait(50000000); 
-}
-
-//===========================================================================
-// NSS (Chip Select) Control Functions
-//===========================================================================
-void rfm9x_nss_select(void) {
-    GPIOA->ODR &= ~GPIO_ODR_4;  // NSS LOW
-}
-
-void rfm9x_nss_deselect(void) {
-    GPIOA->ODR |= GPIO_ODR_4;   // NSS HIGH
 }
 
 //===========================================================================
@@ -112,16 +109,9 @@ void rfm9x_nss_deselect(void) {
 uint8_t spi1_lora_transfer(uint8_t data) {
     while (!(SPI1->SR & SPI_SR_TXE)); //wait until TX buffer is empty
     SPI1->DR = data;
-
     while (!(SPI1->SR & SPI_SR_RXNE));
-    
     uint8_t result = SPI1->DR;
-
-    (void) SPI1->SR;
-    (void) SPI1->DR;
-
     return result;
-    
 }
 
 //===========================================================================
@@ -142,8 +132,8 @@ void rfm9x_write_register(uint8_t reg, uint8_t value) {
 //===========================================================================
 uint8_t rfm9x_read_register(uint8_t reg) {
     rfm9x_nss_select();
-    spi1_lora_transfer((reg) & 0x7F);
-    uint8_t value = spi1_lora_transfer(0xff); //dummy byte and receive data
+    spi1_lora_transfer(reg & 0x7F);
+    uint8_t value = spi1_lora_transfer(0xFF); //dummy byte and receive data
     nano_wait(500);
     rfm9x_nss_deselect();
     return value;
@@ -160,48 +150,22 @@ void rfm9x_set_mode(uint8_t mode) {
 // Set Frequency
 //===========================================================================
 void rfm9x_set_frequency(uint32_t freq_mhz) {
-
-    rfm9x_set_mode(0x81); //standby
+    rfm9x_set_mode(0x81); // standby
     nano_wait(10000);
-
     uint64_t frf = ((uint64_t)freq_mhz * 1000000ULL << 19) / 32000000ULL;
-    uint8_t msb = (frf >> 16) & 0xFF;
-    uint8_t mid = (frf >> 8) & 0xFF;
-    uint8_t lsb = frf & 0xFF;
-
-    rfm9x_write_register(0x06, msb);
+    rfm9x_write_register(0x06, (frf >> 16) & 0xFF);
     nano_wait(1000);
-
-    uint8_t verify_msb = rfm9x_read_register(0x06);
-    char bufff[64];
-    sprintf(bufff, "Written MSB: 0x%02X, Readback MSB: 0x%02X\r\n", msb, verify_msb);
-    uart_send_string(bufff);
-
-    rfm9x_write_register(0x07, mid);
+    rfm9x_write_register(0x07, (frf >> 8) & 0xFF);
     nano_wait(1000);
-    rfm9x_write_register(0x08, lsb);
+    rfm9x_write_register(0x08, frf & 0xFF);
     nano_wait(1000);
-
-    char buf[64];
-    sprintf(buf, "FRF Written: %02X %02X %02X\r\n", msb, mid, lsb);
-    uart_send_string(buf);
-
-    uint8_t read_msb = rfm9x_read_register(0x06);
-    uint8_t read_mid = rfm9x_read_register(0x07);
-    uint8_t read_lsb = rfm9x_read_register(0x08);
-
-    sprintf(buf, "FRF Readback: %02X %02X %02X\r\n", read_msb, read_mid, read_lsb);
-    uart_send_string(buf);
 }
-
 
 //===========================================================================
 // Set TX Power
 //===========================================================================
 void rfm9x_set_tx_power(uint8_t power) {
     if (power > 20) power = 20;  //max power is 20dBm
-    rfm9x_write_register(0x09, power);
-    
     if (power > 17) {
         rfm9x_write_register(0x09, 0x8F); //PA_BOOST + High Power
         rfm9x_write_register(0x4D, 0x87); //RegPaDac = High Power Mode
@@ -258,7 +222,6 @@ void rfm9x_transmit_message(const char* message) {
 
     rfm9x_set_mode(0x01); //SLEEP
     nano_wait(10000);
-
     rfm9x_set_mode(0x82); //standby
     rfm9x_write_register(0x0D, 0x00); //FIFO pointer to base
 
@@ -281,28 +244,57 @@ void rfm9x_transmit_message(const char* message) {
 //===========================================================================
 // Setup RX Transmission (LoRa Mode)
 //===========================================================================
-
 uint8_t rfm9x_try_receive_message(char* buffer, uint8_t max_len) {
+    // Ensure the radio is in RX Continuous mode
+    rfm9x_set_mode(0x05); //RegOpMode = RXCONTINUOUS
+
     uint8_t irq_flags = rfm9x_read_register(0x12);
 
-    if (irq_flags & 0x40) {
+    if (irq_flags & 0x40) { //RxDone
+        if (irq_flags & 0x20) { //PayloadCrcError
+            uart_send_string("[RX] CRC error. Dropping packet.\r\n");
+            rfm9x_write_register(0x12, 0xFF); // clear all IRQ flags
+            return 0;
+        }
+
         rfm9x_write_register(0x12, 0xFF); //clear all IRQs
-
         uint8_t len = rfm9x_read_register(0x13);
-        if (len > max_len - 1) len = max_len - 1;
+        if (len >= max_len) len = max_len - 1;
+        uint8_t fifo_rx_current_addr = rfm9x_read_register(0x10);
+        rfm9x_write_register(0x0D, fifo_rx_current_addr); //set FIFO pointer to current RX addr
 
-        rfm9x_write_register(0x0D, 0x00); //FIFO address to current RX base
         for (uint8_t i = 0; i < len; i++) {
             buffer[i] = rfm9x_read_register(0x00);
         }
+        buffer[len] = '\0';
 
-        buffer[len] = '\0'; //null-terminate for printing
         return len;
     }
 
-    return 0; //nothing
+    return 0; // No valid message
+}
+void listen_and_timestamp_rx(void) {
+    char buffer[64] = {0};
+    uint8_t len = rfm9x_try_receive_message(buffer, sizeof(buffer));
+    if (len > 0) {
+        char buf[128];
+        sprintf(buf, "[RX] Alert received at t=%lu ms\r\n", system_time);
+        uart_send_string(buf);
+        sprintf(buf, "[RX] Message content: %s\r\n", buffer);
+        uart_send_string(buf);
+    }
 }
 
+void transmit_alert_with_timestamp(void) {
+    const char* msg = "EMERGENCY_ALERT";
+    uint32_t tx_time = system_time;
+    char buf[128];
+    sprintf(buf, "[TX] Alert triggered at t=%lu ms\r\n", tx_time);
+    uart_send_string(buf);
+    rfm9x_transmit_message(msg);
+    sprintf(buf, "[TX] Alert sent at t=%lu ms\r\n", system_time);
+    uart_send_string(buf);
+}
 
 //===========================================================================
 // TESTING FUNCTIONS
@@ -435,32 +427,38 @@ void test_rfm9x_basic_communication() {
 
 void fake_rx_custom_message(const char* message) {
     uint8_t len = strlen(message);
-    rfm9x_set_mode(0x01);
-    rfm9x_write_register(0x0D, 0x00);
+    if (len == 0 || len >= 63) return;
 
+    rfm9x_set_mode(0x82); // standby
+    nano_wait(10000);
+
+    rfm9x_write_register(0x0D, 0x00); // FIFO pointer = base addr
     for (uint8_t i = 0; i < len; i++) {
         rfm9x_write_register(0x00, message[i]);
     }
 
-    rfm9x_write_register(0x13, len);  //RegRxNbBytes
-    rfm9x_write_register(0x10, 0x00);  //RegFifoRxCurrentAddr
+    rfm9x_write_register(0x10, 0x00); // RegFifoRxCurrentAddr = 0
+    rfm9x_write_register(0x13, len);  // RegRxNbBytes = message length
+    rfm9x_write_register(0x12, 0x40); // Set RxDone flag
+    uint8_t rx_addr = rfm9x_read_register(0x10);
+    rfm9x_write_register(0x0D, rx_addr);
 
-    //manually simulate interrupt
-    rfm9x_write_register(0x12, 0x40);
+    rfm9x_set_mode(0x05); // Switch to RX continuous mode
 
-    uart_send_string("Reading back message from FIFO...\r\n");
-    rfm9x_set_mode(0x05);
-    uint8_t buf[64];
-    rfm9x_write_register(0x0D, 0x00);
+    uart_send_string("Fake ALERT message injected.\r\n");
+
+    char buf[64] = {0};
     for (uint8_t i = 0; i < len; i++) {
         buf[i] = rfm9x_read_register(0x00);
     }
     buf[len] = '\0';
 
     uart_send_string("What I get back: ");
-    uart_send_string((char*)buf);
+    uart_send_string(buf);
     uart_send_string("\r\n");
 }
+
+
 
 
 void rfm9x_test_suite() {
@@ -509,5 +507,3 @@ void rfm9x_test_suite() {
 
     uart_send_string("RFM9X Test Suite Complete!\r\n\n");
 }
-
-

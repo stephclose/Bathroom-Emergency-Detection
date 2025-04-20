@@ -31,4 +31,6 @@ void rfm9x_enter_lora_mode(void);
 void test_spi_manual_transfer(void);
 void debug_spi_registers(void);
 void test_rfm9x_basic_communication(void);
+void listen_and_print_rx_timestamp(void);
+void transmit_alert_with_timestamp(void);
 #endif // RFM9X_H
