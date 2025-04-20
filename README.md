@@ -2,14 +2,12 @@ Bathroom Emergency Detection System
 
 A real-time **emergency alert system** designed to detect incidents and notify staff discreetly.
 
-Team 21 – Damien Center Collaboration
-Stephanie Close
+## Team 21 – Damien Center Collaboration
 
-Jenovia Mistry
-
-Dimitris Kontos
-
-Oliver Boettger
+- **Dimitris Kontos**  
+- **Stephanie Close**  
+- **Jenovia Mistry**  
+- **Oliver Boettger**
 
 ---
 
