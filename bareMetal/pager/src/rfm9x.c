@@ -37,15 +37,18 @@ void init_spi1_lora(void) {
     GPIOA->AFR[0] &= ~((0xF << (5 * 4)) | (0xF << (6 * 4)) | (0xF << (7 * 4)));
 
     SPI1->CR1 &= ~SPI_CR1_SPE;
-
     SPI1->CR1 &= ~(SPI_CR1_CPOL | SPI_CR1_CPHA);
     SPI1->CR1 |= SPI_CR1_MSTR | SPI_CR1_SSM | SPI_CR1_SSI;  //MM, software NSS
     SPI1->CR1 |= SPI_CR1_BR; //lowest br
-
-    SPI1->CR2 |= SPI_CR2_DS_3 | SPI_CR2_DS_2 | SPI_CR2_DS_1 | SPI_CR2_DS_0;
-    SPI1->CR2 &= ~SPI_CR2_DS_3; //8-bit transmission
-    
     SPI1->CR1 |= SPI_CR1_SPE;  
+
+    //SPI1->CR2 |= SPI_CR2_DS_3 | SPI_CR2_DS_2 | SPI_CR2_DS_1 | SPI_CR2_DS_0;
+    
+    //SPI1->CR2 &= ~SPI_CR2_DS_3; //8-bit transmission
+
+    SPI1->CR2 &= ~SPI_CR2_DS; // Clear data size bits
+    SPI1->CR2 |= SPI_CR2_DS_2 | SPI_CR2_DS_1 | SPI_CR2_DS_0; // Set data size to 8 bits
+
 
 }
 
@@ -56,7 +59,6 @@ void rfm9x_reset(void) {
     ENABLE_GPIOB_CLOCK();
     GPIOB->MODER &= ~GPIO_MODER_MODER0;
     GPIOB->MODER |= GPIO_MODER_MODER0_0;
-
     GPIOB->ODR &= ~GPIO_ODR_0; //RESET Low
     nano_wait(50000000); 
     GPIOB->ODR |= GPIO_ODR_0; //RESET High
@@ -69,31 +71,6 @@ void rfm9x_reset(void) {
 
 void rfm9x_nss_select(void)   { GPIOA->ODR &= ~RFM9X_NSS_PIN; }
 void rfm9x_nss_deselect(void) { GPIOA->ODR |=  RFM9X_NSS_PIN; }
-
-void test_rfm9x_write_read_frf_registers() {
-    uart_send_string("Testing manual FRF write...\r\n");
-
-    rfm9x_set_mode(0x81); //standby
-    nano_wait(10000);
-
-    //manually write FRF: 0xE4 0x00 0xC0 = 915 MHz
-    rfm9x_write_register(0x06, 0xE4);
-    nano_wait(1000);
-    rfm9x_write_register(0x07, 0x00);
-    nano_wait(1000);
-    rfm9x_write_register(0x08, 0xC0);
-    nano_wait(1000);
-
-    uint8_t msb = rfm9x_read_register(0x06);
-    nano_wait(500);
-    uint8_t mid = rfm9x_read_register(0x07);
-    nano_wait(500);
-    uint8_t lsb = rfm9x_read_register(0x08);
-
-    char buf[64];
-    sprintf(buf, "Confirm FRF: 0x%02X 0x%02X 0x%02X\r\n", msb, mid, lsb);
-    uart_send_string(buf);
-}
 
 void rfm9x_enter_lora_mode(void) {
     uint8_t opmode = rfm9x_read_register(0x01);
@@ -110,8 +87,7 @@ uint8_t spi1_lora_transfer(uint8_t data) {
     while (!(SPI1->SR & SPI_SR_TXE)); //wait until TX buffer is empty
     SPI1->DR = data;
     while (!(SPI1->SR & SPI_SR_RXNE));
-    uint8_t result = SPI1->DR;
-    return result;
+    return SPI1->DR;
 }
 
 //===========================================================================
@@ -125,17 +101,34 @@ void rfm9x_write_register(uint8_t reg, uint8_t value) {
     spi1_lora_transfer(value);
     nano_wait(100);
     rfm9x_nss_deselect();
+    nano_wait(1000); 
 }
+
+void rfm9x_write_registers(uint8_t start_reg, const uint8_t* values, uint8_t length) {
+    rfm9x_nss_select();
+    nano_wait(100);
+    spi1_lora_transfer(start_reg | 0x80);  // Set MSB for write operation
+    for (uint8_t i = 0; i < length; i++) {
+        spi1_lora_transfer(values[i]);
+    }
+    nano_wait(100);
+    rfm9x_nss_deselect();
+    nano_wait(1000);
+}
+
 
 //===========================================================================
 // Read from RFM9X Register
 //===========================================================================
 uint8_t rfm9x_read_register(uint8_t reg) {
     rfm9x_nss_select();
+    nano_wait(100);
     spi1_lora_transfer(reg & 0x7F);
-    uint8_t value = spi1_lora_transfer(0xFF); //dummy byte and receive data
-    nano_wait(500);
+    nano_wait(50);
+    uint8_t value = spi1_lora_transfer(0xff); //dummy byte and receive data
+    nano_wait(100);
     rfm9x_nss_deselect();
+    nano_wait(1000);
     return value;
 }
 
@@ -149,30 +142,61 @@ void rfm9x_set_mode(uint8_t mode) {
 //===========================================================================
 // Set Frequency
 //===========================================================================
-void rfm9x_set_frequency(uint32_t freq_mhz) {
-    rfm9x_set_mode(0x81); // standby
-    nano_wait(10000);
-    uint64_t frf = ((uint64_t)freq_mhz * 1000000ULL << 19) / 32000000ULL;
-    rfm9x_write_register(0x06, (frf >> 16) & 0xFF);
+void rfm9x_set_frequency(uint32_t freq_hz) {
+    char buf[128];
+    float fstep = 61.03515625f; // 32 MHz / 2^19
+    uint32_t frf = (uint32_t)(freq_hz / fstep);
+
+    uint8_t msb = (frf >> 16) & 0xFF;
+    uint8_t mid = (frf >> 8) & 0xFF;
+    uint8_t lsb = frf & 0xFF;
+
+    // Write FRF registers
+    rfm9x_write_register(0x06, msb);
     nano_wait(1000);
-    rfm9x_write_register(0x07, (frf >> 8) & 0xFF);
-    nano_wait(1000);
-    rfm9x_write_register(0x08, frf & 0xFF);
-    nano_wait(1000);
+    //rfm9x_write_register(0x07, mid);
+    //rfm9x_write_register(0x08, lsb);
+
+    // Read them back to verify
+    uint8_t read_msb = rfm9x_read_register(0x06);
+    uint8_t read_mid = rfm9x_read_register(0x07);
+    uint8_t read_lsb = rfm9x_read_register(0x08);
+
+    sprintf(buf, "Wrote FRF: %02X %02X %02X\r\n", msb, mid, lsb);
+    uart_send_string(buf);
+    sprintf(buf, "Read  FRF: %02X %02X %02X\r\n", read_msb, read_mid, read_lsb);
+    uart_send_string(buf);
+
+    uint32_t frf_readback = (read_msb << 16) | (read_mid << 8) | read_lsb;
+    float actual_freq = frf_readback * fstep;
+    sprintf(buf, "Actual Frequency: %.2f Hz\r\n", actual_freq);
+    uart_send_string(buf);
 }
+
 
 //===========================================================================
 // Set TX Power
 //===========================================================================
-void rfm9x_set_tx_power(uint8_t power) {
-    if (power > 20) power = 20;  //max power is 20dBm
-    if (power > 17) {
-        rfm9x_write_register(0x09, 0x8F); //PA_BOOST + High Power
-        rfm9x_write_register(0x4D, 0x87); //RegPaDac = High Power Mode
-    } else { 
-        rfm9x_write_register(0x09, 0x80 | (power - 2)); //PA_BOOST
-        rfm9x_write_register(0x4D, 0x84); //RegPaDac = Normal Mode
-    }
+
+void RFO_max_output(void) {
+    rfm9x_nss_select();
+    nano_wait(1000);
+    rfm9x_write_register(0x09, 0xFF);
+    rfm9x_write_register(0x4D, 0x87);
+    rfm9x_nss_deselect();
+    nano_wait(1000);
+}
+
+void PA_boost(void) { //NOT WORKING should return 0x8f in reg
+    rfm9x_set_mode(0x81);
+    nano_wait(10000);
+
+    rfm9x_write_register(0x09, 0xFF); //RegPaConfig: PA_BOOST, MaxPower=7, OutputPower=15
+    nano_wait(1000);
+
+    rfm9x_write_register(0x4D, 0x07); //RegPaDac: Enable +20 dBm on PA_BOOST
+    nano_wait(1000);
+
 }
 
 //===========================================================================
@@ -218,28 +242,24 @@ uint8_t rfm9x_receive_packet(uint8_t *buffer, uint8_t max_length) {
 //===========================================================================
 void rfm9x_transmit_message(const char* message) {
     uint8_t len = strlen(message);
-    if (len > 255) len = 255; //max payload limit
+    if (len > 255) len = 255;
 
-    rfm9x_set_mode(0x01); //SLEEP
-    nano_wait(10000);
-    rfm9x_set_mode(0x82); //standby
-    rfm9x_write_register(0x0D, 0x00); //FIFO pointer to base
+    rfm9x_set_mode(0x81); // Standby
+    rfm9x_write_register(0x0D, 0x00); // FIFO pointer
 
     for (uint8_t i = 0; i < len; i++) {
         rfm9x_write_register(0x00, message[i]);
     }
 
-    rfm9x_write_register(0x22, len); //payload len
-    rfm9x_set_mode(0x83); //TX mode
+    rfm9x_write_register(0x22, len); // Payload length
+    rfm9x_set_mode(0x83); // Transmit
 
-    uart_send_string("Transmitting...\r\n");
+    while (!(rfm9x_read_register(0x12) & 0x08)); // Wait for TxDone
+    rfm9x_write_register(0x12, 0x08); // Clear TxDone
 
-    while (!(rfm9x_read_register(0x12) & 0x08)); 
-    rfm9x_write_register(0x12, 0x08); //clear
-
-    uart_send_string("Transmit complete!\r\n");
-    rfm9x_set_mode(0x82);
+    rfm9x_set_mode(0x81); // Return to Standby
 }
+
 
 //===========================================================================
 // Setup RX Transmission (LoRa Mode)
@@ -305,9 +325,11 @@ void rfm9x_print_tx_config(uint8_t expected_payload_len) {
 
     uint8_t opmode = rfm9x_read_register(0x01);
     uint8_t paconfig = rfm9x_read_register(0x09);
+
     uint8_t frf_msb = rfm9x_read_register(0x06);
     uint8_t frf_mid = rfm9x_read_register(0x07);
     uint8_t frf_lsb = rfm9x_read_register(0x08);
+
     uint8_t fifo_addr = rfm9x_read_register(0x0D);
     uint8_t payload_len = rfm9x_read_register(0x22);
     uint8_t irq_flags = rfm9x_read_register(0x12);
@@ -317,17 +339,23 @@ void rfm9x_print_tx_config(uint8_t expected_payload_len) {
     uart_send_string(buf);
     sprintf(buf, "  RegOpMode         (0x01) = 0x%02X\r\n", opmode);
     uart_send_string(buf);
-    sprintf(buf, "  RegPaConfig       (0x09) = 0x%02X\r\n", paconfig);
+    sprintf(buf, "  RegPaConfig       (0x09) = 0x%02X\r\n\n", paconfig);
+    //uart_send_string(buf);
+    //sprintf(buf, "  RegFrf:           %02X %02X %02X\r\n", frf_msb, frf_mid, frf_lsb);
     uart_send_string(buf);
-    sprintf(buf, "  RegFrf:           %02X %02X %02X\r\n", frf_msb, frf_mid, frf_lsb);
+    sprintf(buf, "  RegFrfMSB         (0x06) = 0x%02X (0xE4)\r\n", frf_msb);
+    uart_send_string(buf);
+    sprintf(buf, "  RegFrfMID         (0x07) = 0x%02X (0xC0)\r\n", frf_mid);
+    uart_send_string(buf);
+    sprintf(buf, "  RegFrfLSB         (0x08) = 0x%02X (0x00)\r\n\n", frf_lsb);
     uart_send_string(buf);
     sprintf(buf, "  RegFifoAddrPtr    (0x0D) = 0x%02X\r\n", fifo_addr);
     uart_send_string(buf);
-    sprintf(buf, "  RegPayloadLength  (0x22) = 0x%02X (expected %d)\r\n", payload_len, expected_payload_len);
+    sprintf(buf, "  RegPayloadLength  (0x22) = 0x%02X (%d)\r\n", payload_len, expected_payload_len);
     uart_send_string(buf);
     sprintf(buf, "  RegIrqFlags       (0x12) = 0x%02X\r\n", irq_flags);
     uart_send_string(buf);
-    sprintf(buf, "  RegVersion        (0x42) = 0x%02X\r\n", version);
+    sprintf(buf, "  RegVersion        (0x42) = 0x%02X (SX1278)\r\n", version);
     uart_send_string(buf);
 }
 
@@ -335,7 +363,7 @@ void test_rfm9x_registers() {
     uart_send_string("Testing SPI Communication with RFM9X...\r\n");
     
     for (uint8_t reg = 0x00; reg <= 0x7F; reg++) {  //read all 128 registers
-        uint8_t value = rfm9x_read_register(reg - (reg != 0));
+        uint8_t value = rfm9x_read_register(reg);// - (reg != 0));
         char buf[50];
         sprintf(buf, "Reg 0x%02X = 0x%02X\r\n", reg, value);
         uart_send_string(buf);

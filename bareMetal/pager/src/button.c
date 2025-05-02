@@ -68,7 +68,22 @@ void configure_pb2_exti(void) {
     NVIC_SetPriority(EXTI2_3_IRQn, 1);
 }
 
-void EXTI2_3_IRQHandler(void) {
+void configure_pa0_exti(void) {
+    RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
+    GPIOA->MODER &= ~(3 << (0 * 2));  // Input mode
+    GPIOA->PUPDR |= (1 << (0 * 2));   // Pull-up
+
+    SYSCFG->EXTICR[0] &= ~SYSCFG_EXTICR1_EXTI0;
+    SYSCFG->EXTICR[0] |= SYSCFG_EXTICR1_EXTI0_PA;
+
+    EXTI->IMR |= EXTI_IMR_IM0;        // Unmask EXTI0
+    EXTI->RTSR |= EXTI_RTSR_TR0;      // Rising edge trigger
+    EXTI->FTSR &= ~EXTI_FTSR_TR0;     // Disable falling edge
+
+    NVIC_EnableIRQ(EXTI0_1_IRQn);     // Enable interrupt
+}
+
+/*void EXTI2_3_IRQHandler(void) {
     if (EXTI->PR & EXTI_PR_PR2) {
         if (lcd_state == LCD_STATE_STANDBY) {
             lcd_state = LCD_STATE_EMERGENCY;
@@ -78,4 +93,27 @@ void EXTI2_3_IRQHandler(void) {
         uart_send_string("PB2 Button Toggled\r\n");
         EXTI->PR |= EXTI_PR_PR2; // Clear pending flag
     }
+}*/
+
+void EXTI2_3_IRQHandler(void) {
+    if (EXTI->PR & EXTI_PR_PR2) {
+        uart_send_string("PB2 Button Toggled\r\n");
+
+        switch (lcd_state) {
+            case LCD_STATE_STANDBY:
+                lcd_state = LCD_STATE_EMERGENCY;
+                break;
+
+            case LCD_STATE_EMERGENCY:
+                lcd_state = LCD_STATE_ACKNOWLEDGED;
+                break;
+
+            case LCD_STATE_ACKNOWLEDGED:
+                lcd_state = LCD_STATE_STANDBY;
+                break;
+        }
+
+        EXTI->PR |= EXTI_PR_PR2; // Clear pending flag
+    }
 }
+

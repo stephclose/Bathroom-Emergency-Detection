@@ -3,13 +3,10 @@
 
 #include <stdint.h>
 
-void setup_tim2_pwm_pa15(void);
-void buzzer_test_gpio_toggle(void);
-
-void buzzer_init(void);
 void buzzer_on(void);
 void buzzer_off(void);
-void buzzer_poll(void);
+void buzzer_init(void);
+void buzzer_pulse(uint8_t times);
 
 
 #endif // BUZZER_H

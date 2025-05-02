@@ -22,5 +22,7 @@ void lcd_clear(void);
 void lcd_set_cursor(uint8_t row, uint8_t col);
 int alert_triggered(void);
 int emergency_cleared(void);
+void lcd_on(void);
+void lcd_off(void);
 
 #endif // LCD_H

@@ -5,6 +5,7 @@
 
 void button_init(void);
 void configure_pb2_exti(void);
+void configure_pa0_exti(void);
 
 
 

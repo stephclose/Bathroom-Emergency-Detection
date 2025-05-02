@@ -68,6 +68,7 @@ void lcd_send_data(uint8_t data) {
 // LCD Initialization
 //===========================================================================
 void lcd_init(void) {
+    lcd_clear();
     nano_wait(500000);
     lcd_send_cmd(0x33); //initialize LCD
     lcd_send_cmd(0x32); //set to 4-bit mode
@@ -101,4 +102,17 @@ void lcd_clear(void) {
 void lcd_set_cursor(uint8_t row, uint8_t col) {
     uint8_t pos = (row == 0) ? (LCD_CMD_SET_CURSOR + col) : (LCD_CMD_SET_CURSOR + 0x40 + col);
     lcd_send_cmd(pos);
+}
+
+
+//===========================================================================
+// LCD Power
+//===========================================================================
+
+void lcd_off(void) {
+    lcd_send_cmd(0x08);  // Display OFF, cursor off, blink off
+}
+
+void lcd_on(void) {
+    lcd_send_cmd(0x0C);  // Display ON, cursor off, blink off
 }
