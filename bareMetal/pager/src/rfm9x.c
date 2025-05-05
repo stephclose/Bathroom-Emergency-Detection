@@ -162,7 +162,7 @@ void rfm9x_set_frequency(uint32_t freq_hz) {
     uint8_t read_mid = rfm9x_read_register(0x07);
     uint8_t read_lsb = rfm9x_read_register(0x08);
 
-    sprintf(buf, "Wrote FRF: %02X %02X %02X\r\n", msb, mid, lsb);
+    /*sprintf(buf, "Wrote FRF: %02X %02X %02X\r\n", msb, mid, lsb);
     uart_send_string(buf);
     sprintf(buf, "Read  FRF: %02X %02X %02X\r\n", read_msb, read_mid, read_lsb);
     uart_send_string(buf);
@@ -170,7 +170,7 @@ void rfm9x_set_frequency(uint32_t freq_hz) {
     uint32_t frf_readback = (read_msb << 16) | (read_mid << 8) | read_lsb;
     float actual_freq = frf_readback * fstep;
     sprintf(buf, "Actual Frequency: %.2f Hz\r\n", actual_freq);
-    uart_send_string(buf);
+    uart_send_string(buf);*/
 }
 
 

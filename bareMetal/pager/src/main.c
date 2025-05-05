@@ -11,6 +11,7 @@
 #include "hc12.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h> 
 
 // === System State ===
 volatile lcd_state_t lcd_state = LCD_STATE_STANDBY;
@@ -59,11 +60,9 @@ int main(void) {
     //usart4_init();
 
     // === Transmit a character manually on USART5 ===
-    /*while (!(USART5->ISR & USART_ISR_TXE));  // Wait until transmit register empty
-    USART5->TDR = 'X';                       // Send character
-    nano_wait(24000000);                    // Short wait (~0.5 sec)
-    uart5_send_string("Hello UART5\r\n");
-    uart5_send_string(">>> EMERGENCY ALERT on UART5 <<<\r\n");*/
+    while (!(USART5->ISR & USART_ISR_TXE));  //wait until transmit register empty
+    USART5->TDR = 'U';
+    while (!(USART5->ISR & USART_ISR_TC));
 
     lcd_state_t prev_state = -1;
 
@@ -72,7 +71,7 @@ int main(void) {
             switch (lcd_state) {
                 case LCD_STATE_STANDBY:
                     uart_send_string("[STATE] Entered STANDBY mode\r\n");
-                    lcd_display_standby();
+                    lcd_off();
                     break;
 
                 case LCD_STATE_EMERGENCY:
@@ -98,6 +97,10 @@ int main(void) {
                     emergency_trigger_time = get_system_time_ms();
                     delay_ms(100);
                     rfm9x_set_mode(0x82);
+
+                    delay_ms(500);
+                    lcd_off();
+                    lcd_state = LCD_STATE_STANDBY;
                     break;
             }
             prev_state = lcd_state;

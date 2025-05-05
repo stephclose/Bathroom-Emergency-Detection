@@ -9,47 +9,29 @@ void uart5_init(void) {
     RCC->AHBENR |= RCC_AHBENR_GPIOCEN | RCC_AHBENR_GPIODEN;
     RCC->APB1ENR |= RCC_APB1ENR_USART5EN;
 
-    // Configure PC6 as output for debugging (heartbeat LED)
-    GPIOC->MODER |= (1 << (6 * 2));  // PC6 as output
+    GPIOC->MODER |= (1 << (6 * 2));
 
-    // Toggle PC6 to indicate start of UART5 initialization
     GPIOC->ODR ^= (1 << 6);
-    nano_wait(1000000);  // Short delay
-    uart5_send_string("DEBUG: UART5 GPIO Config Start\r\n");
+    nano_wait(1000000);
+  
 
-
-    // Configure PC12 (TX) as alternate function AF2
     GPIOC->MODER &= ~(3 << (12 * 2));
     GPIOC->MODER |=  (2 << (12 * 2));  // AF mode
     GPIOC->AFR[1] &= ~(0xF << ((12 - 8) * 4));
     GPIOC->AFR[1] |=  (2 << ((12 - 8) * 4));  // AF2 for USART5_TX
 
-    // Configure PD2 (RX) as alternate function AF2
     GPIOD->MODER &= ~(3 << (2 * 2));
     GPIOD->MODER |=  (2 << (2 * 2));  // AF mode
     GPIOD->AFR[0] &= ~(0xF << (2 * 4));
     GPIOD->AFR[0] |=  (2 << (2 * 4));  // AF2 for USART5_RX
 
-    // Toggle PC6 to indicate GPIO configuration done
-    GPIOC->ODR ^= (1 << 6);
     nano_wait(1000000);
-    uart_send_string("DEBUG: UART5 GPIO Config Done\r\n");
 
     // Set baud rate for 115200 bps assuming 48 MHz clock
     USART5->BRR = 48000000 / 115200;
-
-    // Toggle PC6 to indicate baud rate set
-    GPIOC->ODR ^= (1 << 6);
     nano_wait(1000000);
-    uart_send_string("DEBUG: UART5 Baud Rate Set\r\n");
-
-    // Enable USART5 transmitter and USART
     USART5->CR1 = USART_CR1_TE | USART_CR1_UE;
-
-    // Toggle PC6 to indicate USART5 enabled
-    GPIOC->ODR ^= (1 << 6);
     nano_wait(1000000);
-    uart_send_string("DEBUG: USART5 Enabled\r\n");
 }
 
 

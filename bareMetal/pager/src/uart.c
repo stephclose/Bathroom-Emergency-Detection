@@ -43,7 +43,7 @@ void uart_init(void) {
     //flash PC6 (UART Enabled)
     GPIOC->ODR ^= (1 << 6); 
     nano_wait(1000000000);
-    uart_send_string("DEBUG: USART2 Enabled\r\n");
+    //uart_send_string("DEBUG: USART2 Enabled\r\n");
 }
 
 //===========================================================================
